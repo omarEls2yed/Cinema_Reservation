@@ -66,6 +66,7 @@ using System.Text.Json.Serialization;
     
     builder.Services.AddScoped<IServiceManager, ServiceManager>();
     builder.Services.AddScoped<TicketPdfService>();
+    builder.Services.AddSignalR();
 
     builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
         {
@@ -101,7 +102,6 @@ using System.Text.Json.Serialization;
         });
     });
 
-    var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key is missing!");
     builder.Services.AddAuthentication(options =>
         {
             options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -148,10 +148,24 @@ using System.Text.Json.Serialization;
             }
         });
     });
+
+
+    builder.Services.AddMassTransit(x =>
+    {
+        x.UsingRabbitMq((context, cfg) =>
+        {
+            cfg.Host("localhost", "/", h =>
+            {
+                h.Username("guest");
+                h.Password("guest");
+            });
+            cfg.ConfigureEndpoints(context);
+        });
+    });
+
     var app = builder.Build();
 
     QuestPDF.Settings.License = LicenseType.Community;
-
     app.UseMiddleware<CustomExceptionHandlerMiddleware>();
 
     if (app.Environment.IsDevelopment())
@@ -162,21 +176,18 @@ using System.Text.Json.Serialization;
 
     app.UseHttpsRedirection();
 
-    using (var scope = app.Services.CreateScope())
+    using var scope = app.Services.CreateScope();
+    var services = scope.ServiceProvider;
+    try
     {
-        var services = scope.ServiceProvider;
-        try
-        {
-            var dataSeeder = services.GetRequiredService<IDataSeeding>();
-            await dataSeeder.IdentityDataSeedAsync();
-        }
-        catch (Exception ex)
-        {
-            var logger = services.GetRequiredService<ILogger<Program>>();
-            logger.LogError(ex, "An error occurred while seeding the database.");
-        }
+        var dataSeeder = services.GetRequiredService<IDataSeeding>();
+        await dataSeeder.IdentityDataSeedAsync();
     }
-
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while seeding the database.");
+    }
     app.UseCors("AllowFrontend");
     app.UseOutputCache();
     app.UseAuthentication();
