@@ -1,21 +1,23 @@
 using Cinema_Reservation.Factories;
 using Cinema_Reservation.MiddleWares;
 using DomainLayer.Contracts;
+using DomainLayer.Models;
+using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Persistence.Data;
+using Persistence.identity;
 using Persistence.Repositories;
 using QuestPDF.Infrastructure;
 using Service;
 using Service.Mapping_Profiles;
 using ServiceAbstraction;
+using Shared.Hubs;
 using StackExchange.Redis;
 using System.Text;
 using System.Text.Json.Serialization;
-using DomainLayer.Models;
-using Persistence.identity;
 
 {
     var builder = WebApplication.CreateBuilder(args);
@@ -32,15 +34,22 @@ using Persistence.identity;
         return ConnectionMultiplexer.Connect(configuration);
     });
 
+
     builder.Services.AddStackExchangeRedisCache(options =>
     {
         options.Configuration = builder.Configuration.GetConnectionString("Redis");
-        options.InstanceName = "Cinema_";
+        options.InstanceName = "Events_";
     });
 
     builder.Services.AddOutputCache(options =>
     {
         options.AddBasePolicy(builder => builder.Expire(TimeSpan.FromSeconds(10)));
+    });
+
+    builder.Services.AddStackExchangeRedisOutputCache(options =>
+    {
+        options.Configuration = builder.Configuration.GetConnectionString("Redis");
+        options.InstanceName = "OutputEvents_";
     });
 
     builder.Services.AddScoped<IUnitOfWorkRepository, UnitOfWorkRepository>();
@@ -83,11 +92,13 @@ using Persistence.identity;
 
     builder.Services.AddCors(options =>
     {
-        options.AddPolicy("AllowAll",
-            builder => builder
-                .AllowAnyOrigin()
+        options.AddPolicy("AllowFrontend", policy =>
+        {
+            policy.WithOrigins("http://localhost:3000") 
+                .AllowAnyHeader()
                 .AllowAnyMethod()
-                .AllowAnyHeader());
+                .AllowCredentials(); 
+        });
     });
 
     var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key is missing!");
@@ -166,14 +177,11 @@ using Persistence.identity;
         }
     }
 
-    app.UseCors("AllowAll");
-
+    app.UseCors("AllowFrontend");
+    app.UseOutputCache();
     app.UseAuthentication();
     app.UseAuthorization();
-
-    app.UseOutputCache();
-
+    app.MapHub<BookingHub>("/bookingHub");
     app.MapControllers();
-
     app.Run();
 }

@@ -11,10 +11,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MassTransit;
+using Shared;
 
 namespace Service
 {
-    public class SeatReservationService(IUnitOfWorkRepository _unitOfWorkRepository,IConnectionMultiplexer _muexer, IPaymentService paymentService) : ISeatReservationService
+    public class SeatReservationService(
+        IUnitOfWorkRepository _unitOfWorkRepository,
+        IConnectionMultiplexer _muexer,
+        IPublishEndpoint _publishEndpoin) : ISeatReservationService
     {
         private readonly IDatabase _redis = _muexer.GetDatabase();
         private string GetLockKey(int eventId, int seatId) => $"lock:event:{eventId}:seat:{seatId}";
@@ -52,41 +57,18 @@ namespace Service
                 bool acquired = await _redis.StringSetAsync(lockKey, userIdStr, TimeSpan.FromMinutes(2), When.NotExists);
                 if (!acquired) return "Booking Failed: Seat was just taken.";
             }
-            try
+            var trackingId = Guid.NewGuid();
+            var message = new BookingMessage()
             {
-                var ticketRepository = _unitOfWorkRepository.GetRepository<Ticket>();
-                var spec = new TicketExistenceSpecification(request.EventId, request.SeatId);
-                if (await ticketRepository.CountAsync(spec) > 0) return "Booking Failed: Seat already sold.";
-                var paymentResult = await paymentService.ProcessPaymentAsync(new PaymentRequestDTO
-                {
-                    UserId = request.UserId,
-                    Amount = request.TicketPrice
-                });
-                if (!paymentResult.IsSuccess) return $"Booking Failed: {paymentResult.Message}";
-                try
-                {
-                    var ticket = new Ticket
-                    {
-                        UserId = request.UserId,
-                        EventId = request.EventId,
-                        SeatId = request.SeatId,
-                        Price = request.TicketPrice,
-                        TicketCode = $"TKT-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}",
-                    };
-                    await ticketRepository.AddAsync(ticket);
-                    await _unitOfWorkRepository.CompleteAsync();
-                    return "Success";
-                }
-                catch (Exception)
-                {
-                    await paymentService.RefundPaymentAsync(paymentResult.TransactionId);
-                    return "Error: Database failed. Payment refunded.";
-                }
-            }
-            finally
-            {
-                await _redis.KeyDeleteAsync(lockKey);
-            }
+                UserId = request.UserId,
+                EventId = request.EventId,
+                SeatId = request.SeatId,
+                TicketPrice = request.TicketPrice,
+                BookingId = trackingId,
+                RequestTime = DateTime.UtcNow
+            };
+            await _publishEndpoin.Publish(message);
+            return $"Processing: Your tracking ID is {trackingId}. We are verifying your seat.";
         }
     }
 }
