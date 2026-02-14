@@ -29,20 +29,26 @@ namespace Service
                 {
                     var User1 = new ApplicationUser()
                     {
+                        UserName = "Mohamed123@gmail.com",
                         Email = "Mohamed123@gmail.com",
                         PhoneNumber = "12345678912",
-                        UserName = "MohamedTarek",
+                        FirstName = "Mohamed",
+                        LastName = "Tarek"
                     };
                     var User2 = new ApplicationUser()
                     {
+                        UserName = "Omar123@gmail.com",
                         Email = "Omar123@gmail.com",
                         PhoneNumber = "12555678912",
-                        UserName = "OmarTarek",
+                        FirstName = "Omar",
+                        LastName = "Elsayed"
                     };
-                    await _userManager.CreateAsync(User1, "P@ssw0rd");
-                    await _userManager.CreateAsync(User2, "P@ssw0rd");
-                    await _userManager.AddToRoleAsync(User1, "Admin");
-                    await _userManager.AddToRoleAsync(User2, "User");
+                    var result1 = await _userManager.CreateAsync(User1, "P@ssw0rd1!");
+                    if (result1.Succeeded)
+                        await _userManager.AddToRoleAsync(User1, "Admin");
+                    var result2 = await _userManager.CreateAsync(User2, "P@ssw0rd1!");
+                    if (result2.Succeeded)
+                        await _userManager.AddToRoleAsync(User2, "User");
                 }
                 await _dbContext.SaveChangesAsync();
             }
