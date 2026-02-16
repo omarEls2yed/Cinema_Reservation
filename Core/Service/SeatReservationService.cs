@@ -27,6 +27,8 @@ namespace Service
         private string GetLockKey(int eventId, int seatId) => $"lock:event:{eventId}:seat:{seatId}";
         public async Task<bool> LockSeatAsync(LockSeatRequestDTO request)
         {
+            var seat = await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
+            if (seat == null) return false;
             var ticketRepository = _unitOfWorkRepository.GetRepository<Ticket>();
             var spec = new TicketExistenceSpecification(request.EventId, request.SeatId);
             var existingTicketCount = await ticketRepository.CountAsync(spec);
@@ -46,6 +48,13 @@ namespace Service
 
         public async Task<string> BookSeatAsync(BookTicketRequestDTO request)
         {
+
+            var targetSeatt = await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
+            var targetEventt = await _unitOfWorkRepository.GetRepository<Event>().GetByIdAsync(request.EventId);
+
+            if (targetSeatt == null) throw new SeatNotFoundException(request.SeatId);
+            if (targetEventt == null) throw new EventNotFoundException(request.EventId);
+
             string lockKey = GetLockKey(request.EventId, request.SeatId);
             string userIdStr = request.UserId.ToString();
             var currentLockValue = await _redis.StringGetAsync(lockKey);
