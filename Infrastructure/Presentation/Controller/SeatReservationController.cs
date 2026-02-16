@@ -35,7 +35,8 @@ namespace Presentation.Controller
         public async Task<ActionResult> BookTicket([FromBody] BookTicketRequestDTO request)
         {
             var result = await _serviceManager.SeatReservationService.BookSeatAsync(request);
-            if (result == "Success") return Ok(new { Message = "Booking confirmed! Ticket created." });
+            if (result.StartsWith("Processing"))
+                return Ok(new { Message = result }); 
             return BadRequest(new { Message = result });
         }
     }
