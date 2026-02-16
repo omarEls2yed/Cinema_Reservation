@@ -13,10 +13,16 @@ namespace Persistence.Repositories
         public static IQueryable<T> GetQuery<T>(IQueryable<T> inputQuery, ISpecification<T> spec) where T : class
         {
             var query = inputQuery;
-            if (spec.WhereExpression is not null) query = query.Where(spec.WhereExpression);
+            if (spec.WhereExpression is not null) 
+                query = query.Where(spec.WhereExpression);
             foreach (var func in spec.CustomQuerys) 
                 query = func(query);
-            
+
+            if (spec.IncludeExpression != null && spec.IncludeExpression.Any())
+            {
+                query = spec.IncludeExpression.Aggregate(query, (current, include) => current.Include(include));
+            }
+
             if (spec.OrderBy is not null)
             {
                 var orderedQuery = query.OrderBy(spec.OrderBy);
@@ -27,7 +33,8 @@ namespace Persistence.Repositories
                 var orderedQuery = query.OrderByDescending(spec.OrderByDesc);
                 query = spec.ThenByDesc != null ? orderedQuery.ThenByDescending(spec.ThenByDesc) : orderedQuery;
             }
-            if (spec.IsPaginated) query = query.Skip(spec.Skip).Take(spec.Take);
+            if (spec.IsPaginated) 
+                query = query.Skip(spec.Skip).Take(spec.Take);
             return query;
         }
     }

@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore.Query;
 
 namespace Service.Specifications
 {
@@ -17,9 +18,7 @@ namespace Service.Specifications
         )
         {
             AddIncludeExpression(e => e.Venue);
-
             AddOrderBy(e => e.EventDate);
-
             ApplyPagination(query.EachPageSize, query.DesiredPageIndx);
         }
     }
