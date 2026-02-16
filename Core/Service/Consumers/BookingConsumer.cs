@@ -17,7 +17,7 @@ using System.Threading.Tasks;
 namespace Service.Consumers
 {
     public class BookingConsumer(
-        IServiceProvider _serviceProvider, 
+        IServiceProvider _serviceProvider,
         ILogger<BookingConsumer> _logger)
         : IConsumer<BookingMessage>
     {
@@ -29,25 +29,38 @@ namespace Service.Consumers
             var paymentSvc = scope.ServiceProvider.GetRequiredService<IPaymentService>();
             var redis = scope.ServiceProvider.GetRequiredService<IConnectionMultiplexer>().GetDatabase();
 
+            string idempotencyKey = $"processing_booking:{msg.BookingId}";
+
+            bool isNewRequest = await redis.StringSetAsync(idempotencyKey, "locked", TimeSpan.FromMinutes(10), When.NotExists);
+
+            if (!isNewRequest)
+            {
+                _logger.LogWarning("Duplicate booking message received or already processing for ID: {BookingId}", msg.BookingId);
+                return; 
+            }
             try
             {
                 var ticketRepository = uow.GetRepository<Ticket>();
                 var spec = new TicketExistenceSpecification(msg.EventId, msg.SeatId);
+
                 if (await ticketRepository.CountAsync(spec) > 0)
                 {
                     await PublishFailure(context, msg, "Seat already sold.");
                     return;
                 }
+
                 var paymentResult = await paymentSvc.ProcessPaymentAsync(new PaymentRequestDTO
                 {
                     UserId = msg.UserId,
                     Amount = msg.TicketPrice
                 });
+
                 if (!paymentResult.IsSuccess)
                 {
                     await PublishFailure(context, msg, paymentResult.Message);
                     return;
                 }
+
                 try
                 {
                     var ticket = new Ticket
@@ -58,8 +71,10 @@ namespace Service.Consumers
                         Price = msg.TicketPrice,
                         TicketCode = $"TKT-{msg.BookingId:N}".Substring(0, 12).ToUpper()
                     };
+
                     await ticketRepository.AddAsync(ticket);
                     await uow.CompleteAsync();
+
                     await context.Publish(new BookingCompletedEvent
                     {
                         BookingId = msg.BookingId,
@@ -68,8 +83,9 @@ namespace Service.Consumers
                         TicketCode = ticket.TicketCode
                     });
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    _logger.LogError(ex, "Database save failed for Booking {BookingId}. Refunding payment.", msg.BookingId);
                     await paymentSvc.RefundPaymentAsync(paymentResult.TransactionId);
                     await PublishFailure(context, msg, "An unexpected error occurred. Payment has been refunded.");
                 }
@@ -79,6 +95,7 @@ namespace Service.Consumers
                 await redis.KeyDeleteAsync($"lock:event:{msg.EventId}:seat:{msg.SeatId}");
             }
         }
+
         private static async Task PublishFailure(ConsumeContext<BookingMessage> context, BookingMessage msg, string errorMessage)
         {
             await context.Publish(new BookingCompletedEvent
