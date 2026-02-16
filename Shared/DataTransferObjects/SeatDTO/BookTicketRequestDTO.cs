@@ -20,7 +20,5 @@ namespace Shared.DataTransferObjects.SeatDTO
         [Required(ErrorMessage = "User ID is required.")]
         [Range(1, int.MaxValue, ErrorMessage = "Invalid User ID.")]
         public int UserId { get; set; }
-
-        public decimal TicketPrice { get; set; } 
     }
 }

@@ -20,6 +20,8 @@ namespace DomainLayer.Models
         public int VenueId { get; set; }
         public Venue Venue { get; set; }
 
+        public decimal BasePrice { get; set; }
+
         public ICollection<Ticket> Tickets { get; set; } = new List<Ticket>();
     }
 }

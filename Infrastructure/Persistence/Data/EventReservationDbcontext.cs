@@ -39,6 +39,8 @@ namespace Persistence.Data
                     .HasForeignKey(t => t.VenueId)
                     .OnDelete(DeleteBehavior.Cascade);
                 e.Property(v => v.Name).HasMaxLength(150).IsRequired();
+                e.Property(v => v.BasePrice).HasColumnType("decimal(4,1)").IsRequired();
+
             });
             modelBuilder.Entity<Seat>(e =>
             {

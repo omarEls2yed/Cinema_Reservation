@@ -11,8 +11,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using DomainLayer.Exceptions;
 using MassTransit;
 using Shared;
+using Event = DomainLayer.Models.Event;
 
 namespace Service
 {
@@ -58,12 +60,19 @@ namespace Service
                 if (!acquired) return "Booking Failed: Seat was just taken.";
             }
             var trackingId = Guid.NewGuid();
+
+            var targetEvent = await _unitOfWorkRepository.GetRepository<Event>().GetByIdAsync(request.EventId);
+
+            var targetSeat= await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
+
+            if (targetEvent == null) throw new EventNotFoundException(request.EventId);
+            var price = targetSeat?.Class.ToLower() == "vip" ? targetEvent.BasePrice * 2 : targetEvent.BasePrice;
             var message = new BookingMessage()
             {
                 UserId = request.UserId,
                 EventId = request.EventId,
                 SeatId = request.SeatId,
-                TicketPrice = request.TicketPrice,
+                TicketPrice = price,
                 BookingId = trackingId,
                 RequestTime = DateTime.UtcNow
             };
