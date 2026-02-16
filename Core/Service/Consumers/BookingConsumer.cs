@@ -30,14 +30,9 @@ namespace Service.Consumers
             var redis = scope.ServiceProvider.GetRequiredService<IConnectionMultiplexer>().GetDatabase();
 
             string idempotencyKey = $"processing_booking:{msg.BookingId}";
-
             bool isNewRequest = await redis.StringSetAsync(idempotencyKey, "locked", TimeSpan.FromMinutes(10), When.NotExists);
+            if (!isNewRequest) return;
 
-            if (!isNewRequest)
-            {
-                _logger.LogWarning("Duplicate booking message received or already processing for ID: {BookingId}", msg.BookingId);
-                return; 
-            }
             try
             {
                 var ticketRepository = uow.GetRepository<Ticket>();
@@ -85,14 +80,18 @@ namespace Service.Consumers
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Database save failed for Booking {BookingId}. Refunding payment.", msg.BookingId);
+                    _logger.LogError(ex, "DB Save Failed. Refunding {BookingId}", msg.BookingId);
                     await paymentSvc.RefundPaymentAsync(paymentResult.TransactionId);
-                    await PublishFailure(context, msg, "An unexpected error occurred. Payment has been refunded.");
+                    await PublishFailure(context, msg, "Database error. Payment refunded.");
                 }
             }
             finally
             {
-                await redis.KeyDeleteAsync($"lock:event:{msg.EventId}:seat:{msg.SeatId}");
+                string lockKey = $"lock:event:{msg.EventId}:seat:{msg.SeatId}";
+                string processingKey = $"processing:event:{msg.EventId}:seat:{msg.SeatId}";
+
+                await redis.KeyDeleteAsync(lockKey);
+                await redis.KeyDeleteAsync(processingKey);
             }
         }
 

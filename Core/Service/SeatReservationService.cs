@@ -27,16 +27,19 @@ namespace Service
         private string GetLockKey(int eventId, int seatId) => $"lock:event:{eventId}:seat:{seatId}";
         public async Task<bool> LockSeatAsync(LockSeatRequestDTO request)
         {
-            var targetSeatt = await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
-            var targetEventt = await _unitOfWorkRepository.GetRepository<Event>().GetByIdAsync(request.EventId);
+            var targetSeat = await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
+            var targetEvent = await _unitOfWorkRepository.GetRepository<Event>().GetByIdAsync(request.EventId);
 
-            if (targetSeatt == null) throw new SeatNotFoundException(request.SeatId);
-            if (targetEventt == null) throw new EventNotFoundException(request.EventId);
+            if (targetSeat == null) throw new SeatNotFoundException(request.SeatId);
+            if (targetEvent == null) throw new EventNotFoundException(request.EventId);
+
+            string processingKey = $"processing:event:{request.EventId}:seat:{request.SeatId}";
+            if (await _redis.KeyExistsAsync(processingKey)) return false;
 
             var ticketRepository = _unitOfWorkRepository.GetRepository<Ticket>();
             var spec = new TicketExistenceSpecification(request.EventId, request.SeatId);
-            var existingTicketCount = await ticketRepository.CountAsync(spec);
-            if (existingTicketCount > 0) return false;
+            if (await ticketRepository.CountAsync(spec) > 0) return false;
+
             string key = GetLockKey(request.EventId, request.SeatId);
             string value = request.UserId.ToString();
             return await _redis.StringSetAsync(key, value, TimeSpan.FromMinutes(10), When.NotExists);
@@ -44,48 +47,60 @@ namespace Service
 
         public async Task<bool> UnlockSeatAsync(UnlockSeatRequestDTO request)
         {
-            var targetSeatt = await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
-            var targetEventt = await _unitOfWorkRepository.GetRepository<Event>().GetByIdAsync(request.EventId);
+            var targetSeat = await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
+            var targetEvent = await _unitOfWorkRepository.GetRepository<Event>().GetByIdAsync(request.EventId);
 
-            if (targetSeatt == null) throw new SeatNotFoundException(request.SeatId);
-            if (targetEventt == null) throw new EventNotFoundException(request.EventId);
+            if (targetSeat == null) throw new SeatNotFoundException(request.SeatId);
+            if (targetEvent == null) throw new EventNotFoundException(request.EventId);
+
+            string processingKey = $"processing:event:{request.EventId}:seat:{request.SeatId}";
+            if (await _redis.KeyExistsAsync(processingKey)) return false;
 
             string key = GetLockKey(request.EventId, request.SeatId);
             var currentLockValue = await _redis.StringGetAsync(key);
-            if (!currentLockValue.HasValue || currentLockValue.ToString() != request.UserId.ToString()) return false;
+
+            if (!currentLockValue.HasValue || currentLockValue.ToString() != request.UserId.ToString())
+                return false;
+
             return await _redis.KeyDeleteAsync(key);
         }
 
         public async Task<string> BookSeatAsync(BookTicketRequestDTO request)
         {
-
-            var targetSeatt = await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
-            var targetEventt = await _unitOfWorkRepository.GetRepository<Event>().GetByIdAsync(request.EventId);
-
-            if (targetSeatt == null) throw new SeatNotFoundException(request.SeatId);
-            if (targetEventt == null) throw new EventNotFoundException(request.EventId);
-
-            string lockKey = GetLockKey(request.EventId, request.SeatId);
-            string userIdStr = request.UserId.ToString();
-            var currentLockValue = await _redis.StringGetAsync(lockKey);
-            if (currentLockValue.HasValue)
-            {
-                if (currentLockValue.ToString() != userIdStr)
-                    return "Booking Failed: Seat is currently locked by another user.";
-            }
-            else
-            {
-                bool acquired = await _redis.StringSetAsync(lockKey, userIdStr, TimeSpan.FromMinutes(2), When.NotExists);
-                if (!acquired) return "Booking Failed: Seat was just taken.";
-            }
-            var trackingId = Guid.NewGuid();
-
+            var targetSeat = await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
             var targetEvent = await _unitOfWorkRepository.GetRepository<Event>().GetByIdAsync(request.EventId);
 
-            var targetSeat= await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
-
+            if (targetSeat == null) throw new SeatNotFoundException(request.SeatId);
             if (targetEvent == null) throw new EventNotFoundException(request.EventId);
-            var price = targetSeat?.Class.ToLower() == "vip" ? targetEvent.BasePrice * 2 : targetEvent.BasePrice;
+
+            string lockKey = GetLockKey(request.EventId, request.SeatId);
+            string processingKey = $"processing:event:{request.EventId}:seat:{request.SeatId}";
+            string userIdStr = request.UserId.ToString();
+
+            bool acquiredProcessing = await _redis.StringSetAsync(processingKey, userIdStr, TimeSpan.FromMinutes(2), When.NotExists);
+            if (!acquiredProcessing)
+            {
+                return "Booking Failed: A request for this seat is already being processed. Please wait.";
+            }
+
+            var currentLockValue = await _redis.StringGetAsync(lockKey);
+            if (currentLockValue.HasValue && currentLockValue.ToString() != userIdStr)
+            {
+                await _redis.KeyDeleteAsync(processingKey);
+                return "Booking Failed: Seat is currently locked by another user.";
+            }
+
+            var ticketRepo = _unitOfWorkRepository.GetRepository<Ticket>();
+            var spec = new TicketExistenceSpecification(request.EventId, request.SeatId);
+            if (await ticketRepo.CountAsync(spec) > 0)
+            {
+                await _redis.KeyDeleteAsync(processingKey);
+                return "Booking Failed: Seat already sold.";
+            }
+
+            var trackingId = Guid.NewGuid();
+            var price = targetSeat.Class.ToLower() == "vip" ? targetEvent.BasePrice * 2 : targetEvent.BasePrice;
+
             var message = new BookingMessage()
             {
                 UserId = request.UserId,
@@ -95,6 +110,7 @@ namespace Service
                 BookingId = trackingId,
                 RequestTime = DateTime.UtcNow
             };
+
             await _publishEndpoin.Publish(message);
             return $"Processing: Your tracking ID is {trackingId}. We are verifying your seat.";
         }
