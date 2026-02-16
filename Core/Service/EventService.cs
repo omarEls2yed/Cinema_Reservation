@@ -39,7 +39,8 @@ namespace Service
                     Name = request.Name,
                     EventDate = request.EventDate,
                     VenueId = request.VenueId,
-                    IsActive = true
+                    IsActive = true,
+                    BasePrice = request.BasePrice
                 };
                 await unitOfWork.GetRepository<Event>().AddAsync(newEvent);
                 await unitOfWork.CompleteAsync();
@@ -82,6 +83,7 @@ namespace Service
                 eventEntity.EventDate = query.NewEventDate;
                 eventEntity.Name = query.NewName;
                 eventEntity.EventDate = query.NewEventDate;
+                eventEntity.BasePrice = query.BasePrice;
                 repo.Update(eventEntity);
                 await unitOfWork.CompleteAsync();
                 await _redis.KeyDeleteAsync($"event_details_{query.Id}");
