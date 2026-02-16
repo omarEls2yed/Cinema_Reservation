@@ -40,7 +40,7 @@ namespace Persistence.Data
                     .OnDelete(DeleteBehavior.Cascade);
                 e.Property(v => v.Name).HasMaxLength(150).IsRequired();
                 e.Property(v => v.BasePrice).HasColumnType("decimal(4,1)").IsRequired();
-
+                e.HasIndex(e => new { e.Name, e.VenueId, e.EventDate }).IsUnique();
             });
             modelBuilder.Entity<Seat>(e =>
             {
@@ -49,11 +49,13 @@ namespace Persistence.Data
                     .HasForeignKey(t => t.VenueId)
                     .OnDelete(DeleteBehavior.Cascade);
                 e.Property(s => s.Class).HasMaxLength(20); 
+                e.HasIndex(s => new { s.Id, s.Row, s.Number }).IsUnique();
             });
             modelBuilder.Entity<Venue>(e =>
             {
                 e.Property(v => v.Name).HasMaxLength(100).IsRequired();
                 e.Property(v => v.Location).HasMaxLength(200);
+                e.HasIndex(v => new { v.Name, v.Location }).IsUnique();
             });
         }
     }

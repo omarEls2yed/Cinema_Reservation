@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.Entity.Infrastructure;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -49,20 +50,38 @@ namespace Service
         public async Task<bool> CreateSeatRowAsync(CreateSeatRowRequestDTO request)
         {
             var seatRepository = _unitOfWorkRepository.GetRepository<Seat>();
+
+            var checkSpec = new SeatRowExistsSpecification(request.VenueId, request.Row);
+            var existingSeat = await seatRepository.GetByIdAsync(checkSpec);
+
+            if (existingSeat != null)
+            {
+                return false;
+            }
+
             var newSeats = new List<Seat>();
             for (int i = 1; i <= request.SeatCount; i++)
             {
                 var seat = new Seat
                 {
                     VenueId = request.VenueId,
-                    Row = request.Row,      
-                    Number = i,                   
-                    Class = request.Class        
-                }; newSeats.Add(seat);
+                    Row = request.Row,
+                    Number = i,
+                    Class = request.Class
+                };
+                newSeats.Add(seat);
             }
-            await seatRepository.AddRangeAsync(newSeats);
-            var saved = await _unitOfWorkRepository.CompleteAsync();
-            return saved > 0;
+
+            try
+            {
+                await seatRepository.AddRangeAsync(newSeats);
+                var saved = await _unitOfWorkRepository.CompleteAsync();
+                return saved > 0;
+            }
+            catch (Exception ex)
+            {
+                return false;
+            }
         }
 
         public async Task<bool> DeleteSeatAsync(DeleteSeatRequestDTO request)

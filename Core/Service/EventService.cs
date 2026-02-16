@@ -32,6 +32,16 @@ namespace Service
 
         public async Task<bool> AddFutureEventAsync(CreateEventRequestDTO request)
         {
+            var repo = unitOfWork.GetRepository<Event>();
+
+            var checkSpec = new EventDuplicateSpecification(request.Name, request.VenueId, request.EventDate);
+            var existingEvent = await repo.GetByIdAsync(checkSpec);
+
+            if (existingEvent != null)
+            {
+                return false;
+            }
+
             try
             {
                 var newEvent = new Event
@@ -42,9 +52,12 @@ namespace Service
                     IsActive = true,
                     BasePrice = request.BasePrice
                 };
-                await unitOfWork.GetRepository<Event>().AddAsync(newEvent);
+
+                await repo.AddAsync(newEvent);
                 await unitOfWork.CompleteAsync();
-                await _redis.KeyDeleteAsync("events_future_*"); 
+
+                await DeleteKeysByPatternAsync("events_future_*");
+
                 return true;
             }
             catch (Exception)
