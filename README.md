@@ -1,4 +1,4 @@
-# 🎬 Cinema Reservation System API
+# 🎬 High-Concurrency-Reservation-Engine Api
 
 A robust, enterprise-grade reservation backend built with **ASP.NET Core (.NET 8)**. This system is designed to handle high-concurrency ticket bookings for cinema events while ensuring zero data loss and preventing "double-booking" through a distributed architecture.
 
@@ -45,7 +45,7 @@ The project follows **Clean Architecture** principles, separating concerns into 
 
 1.  **Clone the Repository**:
     ```bash
-    git clone [https://github.com/omarEls2yed/Cinema_Reservation.git](https://github.com/omarEls2yed/Cinema_Reservation.git)
+    git clone [https://github.com/omarEls2yed/High-Concurrency-Reservation-Engine.git](https://github.com/omarEls2yed/High-Concurrency-Reservation-Engine.git)
     ```
 2.  **Configuration**: Update `appsettings.json` with your specific connection strings for:
     * SQL Server
