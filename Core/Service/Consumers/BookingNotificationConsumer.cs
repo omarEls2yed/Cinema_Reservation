@@ -21,7 +21,7 @@ namespace Service.Consumers
         {
             var msg = context.Message;
             await _hubContext.Clients.
-                User(msg.UserId.ToString()).
+                User(msg.UserId).
                 SendAsync("ReceiveBookingResult", new {
                     bookingId = msg.BookingId,
                     isSuccess = msg.IsSuccess,
