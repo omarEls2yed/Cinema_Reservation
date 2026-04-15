@@ -24,7 +24,7 @@ namespace Service
         IPublishEndpoint _publishEndpoin) : ISeatReservationService
     {
         private readonly IDatabase _redis = _muexer.GetDatabase();
-        private string GetLockKey(int eventId, int seatId) => $"lock:event:{eventId}:seat:{seatId}";
+        private string GetLockKey(int eventId, int seatId) => $"lock:session:{eventId}:seat:{seatId}";
         public async Task<bool> LockSeatAsync(LockSeatRequestDTO request, string userId)
         {
             var targetSeat = await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
@@ -33,7 +33,7 @@ namespace Service
             if (targetSeat == null) throw new SeatNotFoundException(request.SeatId);
             if (targetEvent == null) throw new EventNotFoundException(request.EventId);
 
-            string processingKey = $"processing:event:{request.EventId}:seat:{request.SeatId}";
+            string processingKey = $"processing:session:{request.EventId}:seat:{request.SeatId}";
             if (await _redis.KeyExistsAsync(processingKey)) return false;
 
             var ticketRepository = _unitOfWorkRepository.GetRepository<Ticket>();
@@ -52,7 +52,7 @@ namespace Service
             if (targetSeat == null) throw new SeatNotFoundException(request.SeatId);
             if (targetEvent == null) throw new EventNotFoundException(request.EventId);
 
-            string processingKey = $"processing:event:{request.EventId}:seat:{request.SeatId}";
+            string processingKey = $"processing:session:{request.EventId}:seat:{request.SeatId}";
             if (await _redis.KeyExistsAsync(processingKey)) return false;
 
             string key = GetLockKey(request.EventId, request.SeatId);
@@ -73,7 +73,7 @@ namespace Service
             if (targetEvent == null) throw new EventNotFoundException(request.EventId);
 
             string lockKey = GetLockKey(request.EventId, request.SeatId);
-            string processingKey = $"processing:event:{request.EventId}:seat:{request.SeatId}";
+            string processingKey = $"processing:session:{request.EventId}:seat:{request.SeatId}";
 
             bool acquiredProcessing = await _redis.StringSetAsync(processingKey, userId, TimeSpan.FromMinutes(2), When.NotExists);
             if (!acquiredProcessing)return "Booking Failed: A request for this seat is already being processed. Please wait.";
