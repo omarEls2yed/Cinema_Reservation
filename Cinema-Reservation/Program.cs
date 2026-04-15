@@ -15,19 +15,22 @@ using Service.Mapping_Profiles;
 using ServiceAbstraction;
 using Shared.Hubs;
 using StackExchange.Redis;
+using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 {
     var builder = WebApplication.CreateBuilder(args);
-
+    var keycloakAuthority = builder.Configuration["Keycloak:Authority"]!;
+    var keycloakClientId = builder.Configuration["Keycloak:ClientId"]!;
     builder.Services.AddDbContext<EventReservationDbcontext>(options =>
         options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
     
     
     builder.Services.AddSingleton<IConnectionMultiplexer>(c =>
     {
-        var configuration = ConfigurationOptions.Parse(builder.Configuration.GetConnectionString("Redis"), true);
+        var configuration = ConfigurationOptions.Parse(builder.Configuration.GetConnectionString("Redis")!, true);
         return ConnectionMultiplexer.Connect(configuration);
     });
 
@@ -89,38 +92,65 @@ using System.Text.Json.Serialization;
         });
     });
 
-    builder.Services.AddAuthentication(options =>
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.MetadataAddress = builder.Configuration["Keycloak:MetadataAddress"]!;
+        options.Audience = builder.Configuration["Keycloak:Audience"];
+        options.TokenValidationParameters = new TokenValidationParameters
         {
-            options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-            options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        })
-        .AddJwtBearer(options =>
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["Keycloak:Authority"],
+            ValidateAudience = false,
+            ValidateLifetime = true
+        };
+        options.RequireHttpsMetadata = false;
+
+        options.Events = new JwtBearerEvents
         {
-            options.TokenValidationParameters = new TokenValidationParameters
+            OnTokenValidated = context =>
             {
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true,
-                ValidIssuer = builder.Configuration["Jwt:Issuer"],
-                ValidAudience = builder.Configuration["Jwt:Issuer"],
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
-            };
-        });
+                var identity = context.Principal?.Identity as ClaimsIdentity;
+                var realmAccessClaim = identity?.FindFirst("realm_access");
+
+                if (realmAccessClaim != null)
+                {
+                    var realmAccessObj = JsonDocument.Parse(realmAccessClaim.Value).RootElement;
+                    if (realmAccessObj.TryGetProperty("roles", out var roles))
+                    {
+                        foreach (var role in roles.EnumerateArray())
+                        {
+                            identity!.AddClaim(new Claim(ClaimTypes.Role, role.GetString()!));
+                        }
+                    }
+                }
+                return Task.CompletedTask;
+            }
+        };
+    });
 
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen(c =>
+    builder.Services.AddSwaggerGen(options =>
     {
-        c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+        options.AddSecurityDefinition("OAuth2", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
         {
-            Name = "Authorization",
-            Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
-            Scheme = "Bearer",
-            BearerFormat = "JWT",
-            In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-            Description = "Enter your valid token in the text input below.\r\n\r\nExample: \"eyJhbGciOiJIUzI1NiIsInR5cCI...\""
+            Type = Microsoft.OpenApi.Models.SecuritySchemeType.OAuth2,
+            Flows = new Microsoft.OpenApi.Models.OpenApiOAuthFlows
+            {
+                AuthorizationCode = new Microsoft.OpenApi.Models.OpenApiOAuthFlow
+                {
+                    AuthorizationUrl = new Uri($"{keycloakAuthority}/protocol/openid-connect/auth"),
+                    TokenUrl = new Uri($"{keycloakAuthority}/protocol/openid-connect/token"),
+                    Scopes = new Dictionary<string, string>
+                    {
+                        { "openid", "OpenID Connect scope" },
+                        { "profile", "User profile" }
+                    }
+                }
+            }
         });
-        c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+
+        options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
         {
             {
                 new Microsoft.OpenApi.Models.OpenApiSecurityScheme
@@ -128,10 +158,10 @@ using System.Text.Json.Serialization;
                     Reference = new Microsoft.OpenApi.Models.OpenApiReference
                     {
                         Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                        Id = "Bearer"
+                        Id = "OAuth2"
                     }
                 },
-                new string[] {}
+                Array.Empty<string>()
             }
         });
     });
@@ -182,7 +212,11 @@ using System.Text.Json.Serialization;
     if (app.Environment.IsDevelopment())
     {
         app.UseSwagger();
-        app.UseSwaggerUI();
+        app.UseSwaggerUI(options =>
+        {
+            options.OAuthClientId(keycloakClientId);
+            options.OAuthUsePkce();
+        });
     }
 
     app.UseHttpsRedirection();

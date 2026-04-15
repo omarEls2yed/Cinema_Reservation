@@ -25,7 +25,7 @@ namespace Service
     {
         private readonly IDatabase _redis = _muexer.GetDatabase();
         private string GetLockKey(int eventId, int seatId) => $"lock:event:{eventId}:seat:{seatId}";
-        public async Task<bool> LockSeatAsync(LockSeatRequestDTO request)
+        public async Task<bool> LockSeatAsync(LockSeatRequestDTO request, string userId)
         {
             var targetSeat = await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
             var targetEvent = await _unitOfWorkRepository.GetRepository<Event>().GetByIdAsync(request.EventId);
@@ -41,11 +41,10 @@ namespace Service
             if (await ticketRepository.CountAsync(spec) > 0) return false;
 
             string key = GetLockKey(request.EventId, request.SeatId);
-            string value = request.UserId.ToString();
-            return await _redis.StringSetAsync(key, value, TimeSpan.FromMinutes(10), When.NotExists);
+            return await _redis.StringSetAsync(key, userId, TimeSpan.FromMinutes(10), When.NotExists);
         }
 
-        public async Task<bool> UnlockSeatAsync(UnlockSeatRequestDTO request)
+        public async Task<bool> UnlockSeatAsync(UnlockSeatRequestDTO request, string userId)
         {
             var targetSeat = await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
             var targetEvent = await _unitOfWorkRepository.GetRepository<Event>().GetByIdAsync(request.EventId);
@@ -59,13 +58,13 @@ namespace Service
             string key = GetLockKey(request.EventId, request.SeatId);
             var currentLockValue = await _redis.StringGetAsync(key);
 
-            if (!currentLockValue.HasValue || currentLockValue.ToString() != request.UserId.ToString())
+            if (!currentLockValue.HasValue || currentLockValue.ToString() != userId)
                 return false;
 
             return await _redis.KeyDeleteAsync(key);
         }
 
-        public async Task<string> BookSeatAsync(BookTicketRequestDTO request)
+        public async Task<string> BookSeatAsync(BookTicketRequestDTO request, string userId)
         {
             var targetSeat = await _unitOfWorkRepository.GetRepository<Seat>().GetByIdAsync(request.SeatId);
             var targetEvent = await _unitOfWorkRepository.GetRepository<Event>().GetByIdAsync(request.EventId);
@@ -75,16 +74,13 @@ namespace Service
 
             string lockKey = GetLockKey(request.EventId, request.SeatId);
             string processingKey = $"processing:event:{request.EventId}:seat:{request.SeatId}";
-            string userIdStr = request.UserId.ToString();
 
-            bool acquiredProcessing = await _redis.StringSetAsync(processingKey, userIdStr, TimeSpan.FromMinutes(2), When.NotExists);
-            if (!acquiredProcessing)
-            {
-                return "Booking Failed: A request for this seat is already being processed. Please wait.";
-            }
+            bool acquiredProcessing = await _redis.StringSetAsync(processingKey, userId, TimeSpan.FromMinutes(2), When.NotExists);
+            if (!acquiredProcessing)return "Booking Failed: A request for this seat is already being processed. Please wait.";
+            
 
             var currentLockValue = await _redis.StringGetAsync(lockKey);
-            if (!currentLockValue.HasValue || currentLockValue.ToString() != userIdStr)
+            if (!currentLockValue.HasValue || currentLockValue.ToString() != userId)
             {
                 await _redis.KeyDeleteAsync(processingKey);
                 return "Booking Failed: Your reservation time has expired or seat is locked by another user.";
@@ -103,7 +99,7 @@ namespace Service
 
             var message = new BookingMessage()
             {
-                UserId = request.UserId,
+                UserId = userId,
                 EventId = request.EventId,
                 SeatId = request.SeatId,
                 TicketPrice = price,

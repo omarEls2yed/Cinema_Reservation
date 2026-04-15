@@ -9,10 +9,10 @@ namespace ServiceAbstraction
 {
     public interface ISeatReservationService
     {
-        Task<bool> LockSeatAsync(LockSeatRequestDTO request);
+        Task<bool> LockSeatAsync(LockSeatRequestDTO request, string userId);
         
-        Task<bool> UnlockSeatAsync(UnlockSeatRequestDTO request);
+        Task<bool> UnlockSeatAsync(UnlockSeatRequestDTO request, string userId);
 
-        Task<string> BookSeatAsync(BookTicketRequestDTO request);
+        Task<string> BookSeatAsync(BookTicketRequestDTO request, string userId);
     }
 }
