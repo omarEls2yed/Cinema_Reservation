@@ -11,6 +11,6 @@ namespace ServiceAbstraction
     {
         Task<PaymentResponseDTO> ProcessPaymentAsync(PaymentRequestDTO request);
         Task<bool> RefundPaymentAsync(string transactionId);
-        Task AddNewCardAsync(int userId, string fakeToken, string last4);
+        Task AddNewCardAsync(string userId, string fakeToken, string last4);
     }
 }

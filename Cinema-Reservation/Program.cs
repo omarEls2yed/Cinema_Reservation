@@ -4,14 +4,13 @@ using DomainLayer.Contracts;
 using DomainLayer.Models;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Persistence.Data;
-using Persistence.identity;
 using Persistence.Repositories;
 using QuestPDF.Infrastructure;
 using Service;
+using Service.Consumers;
 using Service.Mapping_Profiles;
 using ServiceAbstraction;
 using Shared.Hubs;
@@ -25,9 +24,7 @@ using System.Text.Json.Serialization;
     builder.Services.AddDbContext<EventReservationDbcontext>(options =>
         options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
     
-    builder.Services.AddDbContext<EventIdentityDbContext>(options =>
-        options.UseSqlServer(builder.Configuration.GetConnectionString("AuthConnection")));
-
+    
     builder.Services.AddSingleton<IConnectionMultiplexer>(c =>
     {
         var configuration = ConfigurationOptions.Parse(builder.Configuration.GetConnectionString("Redis"), true);
@@ -57,7 +54,6 @@ using System.Text.Json.Serialization;
     builder.Services.AddScoped<ISeatReservationService, SeatReservationService>();
     builder.Services.AddScoped<IEventService, EventService>();
     builder.Services.AddTransient<IEmailService, EmailService>();
-    builder.Services.AddScoped<IDataSeeding, DataSeeding>();
 
     builder.Services.AddScoped<Func<ISeatReservationService>>(provider => () => provider.GetRequiredService<ISeatReservationService>());
     builder.Services.AddScoped<Func<IPaymentService>>(provider => () => provider.GetRequiredService<IPaymentService>());
@@ -67,15 +63,6 @@ using System.Text.Json.Serialization;
     builder.Services.AddScoped<IServiceManager, ServiceManager>();
     builder.Services.AddScoped<TicketPdfService>();
     builder.Services.AddSignalR();
-
-    builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
-        {
-            options.Password.RequireDigit = true;
-            options.Password.RequiredLength = 8;
-            options.SignIn.RequireConfirmedEmail = true;
-        })
-        .AddEntityFrameworkStores<EventIdentityDbContext>()
-        .AddDefaultTokenProviders();
 
     builder.Services.AddHttpClient();
     builder.Services.AddScoped<IPaymentService, PaymentService>();
@@ -150,15 +137,39 @@ using System.Text.Json.Serialization;
     });
 
 
-    builder.Services.AddMassTransit(x =>
+    builder.Services.AddMassTransit(conf =>
     {
-        x.UsingRabbitMq((context, cfg) =>
+        conf.AddConsumer<BookingConsumer>();
+        conf.AddConsumer<BookingNotificationConsumer>();
+
+        conf.AddEntityFrameworkOutbox<EventReservationDbcontext>(o =>
         {
-            cfg.Host("localhost", "/", h =>
+            o.UseSqlServer(); 
+            o.UseBusOutbox(); 
+        });
+
+        conf.SetKebabCaseEndpointNameFormatter();
+
+        conf.UsingRabbitMq((context, cfg) =>
+        {
+            cfg.Host(new Uri(builder.Configuration["RabbitMQ:ConnectionString"]!));
+
+            cfg.UseMessageRetry(r =>
             {
-                h.Username("guest");
-                h.Password("guest");
+                r.Interval(3, TimeSpan.FromSeconds(5)); 
+                r.Ignore<ArgumentNullException>(); 
             });
+
+            cfg.ReceiveEndpoint("booking-processing-queue", e =>
+            {
+                e.ConfigureConsumer<BookingConsumer>(context);
+            });
+
+            cfg.ReceiveEndpoint("booking-notifications-queue", e =>
+            {
+                e.ConfigureConsumer<BookingNotificationConsumer>(context);
+            });
+
             cfg.ConfigureEndpoints(context);
         });
     });
@@ -176,18 +187,6 @@ using System.Text.Json.Serialization;
 
     app.UseHttpsRedirection();
 
-    using var scope = app.Services.CreateScope();
-    var services = scope.ServiceProvider;
-    try
-    {
-        var dataSeeder = services.GetRequiredService<IDataSeeding>();
-        await dataSeeder.IdentityDataSeedAsync();
-    }
-    catch (Exception ex)
-    {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while seeding the database.");
-    }
     app.UseCors("AllowFrontend");
     app.UseOutputCache();
     app.UseAuthentication();

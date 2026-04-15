@@ -9,7 +9,7 @@ namespace Service.Specifications
 {
     public class UserCardsSpecification : BaseSpecifications<UserPaymentMethod>
     {
-        public UserCardsSpecification(int userId) : base(card => card.UserId == userId)
+        public UserCardsSpecification(string userId) : base(card => card.UserId == userId)
         {
             AddOrderBy(x => x.Id);
         }

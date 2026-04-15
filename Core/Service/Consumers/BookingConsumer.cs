@@ -60,7 +60,7 @@ namespace Service.Consumers
                 {
                     var ticket = new Ticket
                     {
-                        UserId = msg.UserId,
+                        UserId = msg.UserId, 
                         EventId = msg.EventId,
                         SeatId = msg.SeatId,
                         Price = msg.TicketPrice,
@@ -68,7 +68,6 @@ namespace Service.Consumers
                     };
 
                     await ticketRepository.AddAsync(ticket);
-                    await uow.CompleteAsync();
 
                     await context.Publish(new BookingCompletedEvent
                     {
@@ -77,6 +76,9 @@ namespace Service.Consumers
                         IsSuccess = true,
                         TicketCode = ticket.TicketCode
                     });
+
+                 
+                    await uow.CompleteAsync();
                 }
                 catch (Exception ex)
                 {

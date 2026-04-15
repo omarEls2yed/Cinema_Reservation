@@ -5,18 +5,24 @@ using System.Text;
 using System.Threading.Tasks;
 using DomainLayer.Models;
 using Microsoft.EntityFrameworkCore;
+using MassTransit;
 
 namespace Persistence.Data
 {
     public class EventReservationDbcontext(DbContextOptions<EventReservationDbcontext>options) : DbContext(options)
     {
-        public DbSet<Event> Events { get; set; }
+        public DbSet<DomainLayer.Models.Event> Events { get; set; }
         public DbSet<Seat> Seats { get; set; }
         public DbSet<Ticket> Tickets { get; set; }
         public DbSet<Venue> Venues { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            base.OnModelCreating(modelBuilder);
+
+            modelBuilder.AddInboxStateEntity();
+            modelBuilder.AddOutboxMessageEntity();
+            modelBuilder.AddOutboxStateEntity();
             modelBuilder.Entity<Ticket>(e =>
             {
                 e.Property(t => t.Price)
@@ -32,7 +38,7 @@ namespace Persistence.Data
                 e.HasIndex(t => new { t.EventId, t.SeatId }).IsUnique();
                 e.Property(t => t.TicketCode).HasMaxLength(50);
             });
-            modelBuilder.Entity<Event>(e =>
+            modelBuilder.Entity<DomainLayer.Models.Event>(e =>
             {
                 e.HasOne(t => t.Venue)
                     .WithMany(t => t.Events)

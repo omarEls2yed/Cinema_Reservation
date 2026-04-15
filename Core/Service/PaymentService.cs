@@ -61,7 +61,7 @@ namespace Service
             }
         }
 
-        public async Task AddNewCardAsync(int userId, string token, string last4)
+        public async Task AddNewCardAsync(string userId, string token, string last4)
         {
             var repo = unitOfWork.GetRepository<UserPaymentMethod>();
 

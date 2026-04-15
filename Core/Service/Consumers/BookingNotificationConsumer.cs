@@ -22,7 +22,7 @@ namespace Service.Consumers
             var msg = context.Message;
             await _hubContext.Clients.
                 User(msg.UserId.ToString()).
-                SendAsync("Booking result", new {
+                SendAsync("ReceiveBookingResult", new {
                     bookingId = msg.BookingId,
                     isSuccess = msg.IsSuccess,
                     ticketCode = msg.TicketCode,

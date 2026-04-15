@@ -11,7 +11,7 @@ namespace Shared
         public Guid BookingId { get; set; }
         public int EventId { get; set; }
         public int SeatId { get; set; }
-        public int UserId { get; set; }
+        public string UserId { get; set; }
         public decimal TicketPrice { get; set; }
         public DateTime RequestTime { get; set; }
     }

@@ -84,10 +84,10 @@ namespace Service
             }
 
             var currentLockValue = await _redis.StringGetAsync(lockKey);
-            if (currentLockValue.HasValue && currentLockValue.ToString() != userIdStr)
+            if (!currentLockValue.HasValue || currentLockValue.ToString() != userIdStr)
             {
                 await _redis.KeyDeleteAsync(processingKey);
-                return "Booking Failed: Seat is currently locked by another user.";
+                return "Booking Failed: Your reservation time has expired or seat is locked by another user.";
             }
 
             var ticketRepo = _unitOfWorkRepository.GetRepository<Ticket>();
