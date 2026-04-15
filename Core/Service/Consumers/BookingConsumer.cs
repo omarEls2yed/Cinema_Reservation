@@ -89,8 +89,8 @@ namespace Service.Consumers
             }
             finally
             {
-                string lockKey = $"lock:event:{msg.EventId}:seat:{msg.SeatId}";
-                string processingKey = $"processing:event:{msg.EventId}:seat:{msg.SeatId}";
+                string lockKey = $"lock:session:{msg.EventId}:seat:{msg.SeatId}";
+                string processingKey = $"processing:session:{msg.EventId}:seat:{msg.SeatId}";
 
                 await redis.KeyDeleteAsync(lockKey);
                 await redis.KeyDeleteAsync(processingKey);

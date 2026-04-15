@@ -45,7 +45,7 @@ namespace Persistence.Data
                     .HasForeignKey(t => t.VenueId)
                     .OnDelete(DeleteBehavior.Cascade);
                 e.Property(v => v.Name).HasMaxLength(150).IsRequired();
-                e.Property(v => v.BasePrice).HasColumnType("decimal(4,1)").IsRequired();
+                e.Property(v => v.BasePrice).HasColumnType("decimal(10,2)").IsRequired();
                 e.HasIndex(e => new { e.Name, e.VenueId, e.EventDate }).IsUnique();
             });
             modelBuilder.Entity<Seat>(e =>
@@ -54,8 +54,8 @@ namespace Persistence.Data
                     .WithMany(t => t.Seats)
                     .HasForeignKey(t => t.VenueId)
                     .OnDelete(DeleteBehavior.Cascade);
-                e.Property(s => s.Class).HasMaxLength(20); 
-                e.HasIndex(s => new { s.Id, s.Row, s.Number }).IsUnique();
+                e.Property(s => s.Class).HasMaxLength(20);
+                e.HasIndex(s => new { s.VenueId, s.Row, s.Number }).IsUnique();
             });
             modelBuilder.Entity<Venue>(e =>
             {

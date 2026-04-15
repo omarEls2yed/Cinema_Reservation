@@ -19,7 +19,7 @@ namespace Service.Mapping_Profiles
                 .ForMember(dest => dest.VenueLocation, opt =>
                     opt.MapFrom(src => src.Venue != null ? src.Venue.Location : "Unknown Location"))
                 .ForMember(dest => dest.IsActive, opt =>
-                    opt.MapFrom(src => true)); 
+                    opt.MapFrom(src => src.IsActive)); 
         }
     }
 }
