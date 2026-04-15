@@ -95,7 +95,6 @@ namespace Service
                 if (eventEntity == null) return false;
                 eventEntity.EventDate = query.NewEventDate;
                 eventEntity.Name = query.NewName;
-                eventEntity.EventDate = query.NewEventDate;
                 eventEntity.BasePrice = query.BasePrice;
                 repo.Update(eventEntity);
                 await unitOfWork.CompleteAsync();

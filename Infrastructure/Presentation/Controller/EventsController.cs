@@ -1,7 +1,6 @@
 ﻿using DomainLayer.Exceptions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Org.BouncyCastle.Asn1.Ocsp;
 using ServiceAbstraction;
 using Shared;
 using Shared.DataTransferObjects.EventDTO;

@@ -18,13 +18,23 @@ namespace Service
         private readonly IDatabase _redis = _muxer.GetDatabase();
         public async Task<PaginatedStruct<SeatInformationDTO>> GetAllSeatsAsync(SeatQueryStruct seatQuery)
         {
-            var specification1 = new SeatTicketSpecification(seatQuery);
             var seatRepository = _unitOfWorkRepository.GetRepository<Seat>();
-            var seatsAfterSpecification1 = await seatRepository.GetAllAsync(specification1);
-            var seatsInformationDTOMapper = _mapper.Map<IEnumerable<SeatInformationDTO>>(seatsAfterSpecification1).ToList();
-            int totalSeatsInDb = await seatRepository.CountAsync(specification1);
+
+            var countSpec = new SeatTicketCountSpecification(seatQuery);
+            int totalSeatsInDb = await seatRepository.CountAsync(countSpec);
+
+            var dataSpec = new SeatTicketSpecification(seatQuery);
+            var seatsAfterSpecification = await seatRepository.GetAllAsync(dataSpec);
+
+            var seatsInformationDTOMapper = _mapper.Map<IEnumerable<SeatInformationDTO>>(seatsAfterSpecification).ToList();
+
             await UpdateSeatStatusesFromRedisAsync(seatQuery.EventId, seatsInformationDTOMapper);
-            return new PaginatedStruct<SeatInformationDTO>(seatQuery.DesiredPageIndx, seatQuery.EachPageSize, totalSeatsInDb, seatsInformationDTOMapper);
+
+            return new PaginatedStruct<SeatInformationDTO>(
+                seatQuery.DesiredPageIndx,
+                seatQuery.EachPageSize,
+                totalSeatsInDb,
+                seatsInformationDTOMapper);
         }
 
         private async Task UpdateSeatStatusesFromRedisAsync(int eventId, List<SeatInformationDTO> seats)
@@ -53,12 +63,8 @@ namespace Service
             var checkSpec = new SeatRowExistsSpecification(request.VenueId, request.Row);
             var existingSeat = await seatRepository.GetByIdAsync(checkSpec);
 
-            if (existingSeat != null)
-            {
-                return false;
-            }
-
-            var newSeats = new List<Seat>();
+            if (existingSeat != null)return false;
+                        var newSeats = new List<Seat>();
             for (int i = 1; i <= request.SeatCount; i++)
             {
                 var seat = new Seat
