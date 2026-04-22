@@ -21,7 +21,7 @@ namespace Presentation.Controller
         [HttpPost("lock")]
         public async Task<ActionResult> LockSeat([FromBody] LockSeatRequestDTO request)
         {
-            var userId = User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier);
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             bool success = await _serviceManager.SeatReservationService.LockSeatAsync(request, userId!);
             if (success) return Ok(new { Message = "Seat locked successfully." });
