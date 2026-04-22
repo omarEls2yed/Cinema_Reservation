@@ -23,8 +23,8 @@ services:
       Keycloak__Issuer: ${KEYCLOAK_ISSUER}
 
       # New Relic Hardcoded Fix
-      NEW_RELIC_APP_NAME: "High-Concurrency-Reservation-Engine"
-      NEW_RELIC_LICENSE_KEY: "50cb468f56d1a1a4ba03f357e84c13eb1d02NRAL"
+      NEW_RELIC_APP_NAME: ".."
+      NEW_RELIC_LICENSE_KEY: ".."
       NEW_RELIC_DISTRIBUTED_TRACING_ENABLED: "true"
       NEW_RELIC_LOG_CONSOLE: "true"
 
